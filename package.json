@@ -1,0 +1,54 @@
+{
+  "name": "signalk-ext-companion-apps",
+  "version": "0.1.0",
+  "description": "Show webapps in floating windows over the chart or in the side panel of a plotterExtensions-capable chartplotter",
+  "main": "plugin/index.js",
+  "keywords": [
+    "signalk-node-server-plugin",
+    "signalk-category-chart-plotters"
+  ],
+  "files": [
+    "plugin",
+    "public",
+    "docs/screenshots",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test \"test/**/*.test.js\" \"test/**/*.test.mjs\"",
+    "prepare": "node scripts/build.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "author": "Joel Kozikowski",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joelkoz/signalk-ext-companion-apps.git"
+  },
+  "homepage": "https://github.com/joelkoz/signalk-ext-companion-apps#readme",
+  "bugs": {
+    "url": "https://github.com/joelkoz/signalk-ext-companion-apps/issues"
+  },
+  "devDependencies": {
+    "@material-design-icons/svg": "^0.14.15",
+    "esbuild": "^0.28.0",
+    "express": "^5.2.1",
+    "signalk-plotterext-bus": "^0.18.0"
+  },
+  "signalk-plugin-enabled-by-default": true,
+  "signalk": {
+    "appIcon": "assets/companion-apps.png",
+    "displayName": "Companion Apps",
+    "appstore": {
+      "displayName": "Companion Apps",
+      "categories": [
+        "chart-plotters"
+      ],
+      "author": "Joel Kozikowski",
+      "description": "Show webapps in floating windows over the chart or in the side panel of a plotterExtensions-capable chartplotter"
+    }
+  }
+}
