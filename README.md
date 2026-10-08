@@ -52,8 +52,9 @@ plotter extensions with floating windows, such as Freeboard-SK.
 
 The app list is shared by everyone using this Signal K server. Which windows
 were open ("Remember last") is kept per device. Adding or changing apps needs
-a Signal K login with read/write access (admin on servers older than 2.31);
-anyone can open and close them.
+a Signal K login with read/write access. Anyone who can see the list can
+open and close the apps: on Signal K servers older than 2.31 that is admins
+only, as the list itself is admin-only there.
 
 ## Moving from Freeboard-SK's Instruments drawer
 

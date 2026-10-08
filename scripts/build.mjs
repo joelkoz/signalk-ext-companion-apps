@@ -46,7 +46,6 @@ await build({
 })
 
 cpSync(join(root, 'src/web/companion-apps.css'), join(pub, 'companion-apps.css'))
-cpSync(join(root, 'src/web/assets'), join(pub, 'assets'), { recursive: true })
 
 const page = (name, bodyClass, title) => `<!doctype html>
 <html lang="en">

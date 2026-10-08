@@ -10,8 +10,10 @@
   "files": [
     "plugin",
     "public",
+    "src/web/assets/companion-apps.png",
     "docs/screenshots",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
@@ -39,8 +41,11 @@
   },
   "signalk-plugin-enabled-by-default": true,
   "signalk": {
-    "appIcon": "assets/companion-apps.png",
+    "appIcon": "src/web/assets/companion-apps.png",
     "displayName": "Companion Apps",
+    "screenshots": [
+      "./docs/screenshots/1_companion_apps.jpg"
+    ],
     "appstore": {
       "displayName": "Companion Apps",
       "categories": [
