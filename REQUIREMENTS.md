@@ -625,6 +625,14 @@ Window entries are not in the cycle: they are not shown in the side panel.
 
 ## 10. Limitations to document in the README
 
+- **At the very top, while Freeboard-SK 3.3.0 is in beta: the minimum host
+  version** (3.3.0 is the first with `windows` and `events.publish`), since
+  the README is the App Store page. An older host skips the extension
+  entirely (its `requires` are not met), so without this note the plugin
+  seems to do nothing. Remove the note once 3.3.0 or later is the stable
+  (`latest`) Freeboard-SK release; the version stays in the sentence below
+  it.
+
 - **Custom URLs work only for pages that allow being framed.** Pages on the
   Signal K server always work. Other sites must not send
   `X-Frame-Options: DENY/SAMEORIGIN` or a restrictive CSP `frame-ancestors`. An

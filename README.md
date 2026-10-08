@@ -1,12 +1,16 @@
 # Companion Apps
 
+> **Requires Freeboard-SK 3.3.0 or later**, available as a beta until its
+> stable release. On older versions of Freeboard-SK, Companion Apps does not
+> appear at all: no toolbar button, no side panel.
+
 Keep your favourite webapps beside the chart. Companion Apps shows Signal K
 webapps (KIP, Instrument Panel, an echo sounder, …) or any web page either in
 **floating windows over the chart** or in the chartplotter's **side panel**,
-opened from a list or from toolbar buttons of their own.
+opened from the App Manager or from toolbar buttons of their own.
 
 It is a plotter extension: it works in chartplotters that support Signal K
-plotter extensions with floating windows, such as Freeboard-SK.
+plotter extensions with floating windows, such as Freeboard-SK 3.3.0 or later.
 
 ## Getting started
 
