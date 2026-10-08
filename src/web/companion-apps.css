@@ -314,6 +314,18 @@ body.night .add-btn {
   color: var(--fg);
 }
 
+.link-btn {
+  border: 0;
+  padding: 0 4px;
+  min-height: 0;
+  color: var(--accent);
+  text-decoration: underline;
+  font-size: inherit;
+}
+body.night .link-btn {
+  color: var(--fg);
+}
+
 /* ---- configuration form ---- */
 
 .form-header {

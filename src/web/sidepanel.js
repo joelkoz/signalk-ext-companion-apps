@@ -16,6 +16,7 @@ import { T, PANEL_TOPICS, SCOPE, VERSION, randomId, isV1 } from './protocol.js'
 const { cleanEntry, resolveUrl, MAX_ENTRIES } = validate
 
 const HELLO_TIMEOUT_MS = 3000
+const REPLY_TIMEOUT_MS = 10000
 const ICON_LABELS = new Map([...BUTTON_ICONS, ...RETIRED_ICONS])
 
 // ---- tiny DOM helpers ------------------------------------------------------
@@ -59,14 +60,39 @@ let frames = null
 
 // ---- bus -------------------------------------------------------------------
 
+// A publish resolves whether or not anyone heard it, so a request whose reply
+// never comes (the window manager is gone) fails after REPLY_TIMEOUT_MS
+// instead of leaving the form on "Saving…".
 function send(topic, params, onReply) {
   const reqId = randomId(16)
-  if (onReply) pending.set(reqId, onReply)
-  client.publish(topic, { v: VERSION, reqId, ...params }, SCOPE).catch((err) => {
+  const settle = (reply) => {
+    if (!pending.has(reqId)) return
+    clearTimeout(pending.get(reqId).timer)
     pending.delete(reqId)
-    onReply?.({ ok: false, error: { code: 'bus', message: err.message } })
+    onReply?.(reply)
+  }
+  const timer = setTimeout(
+    () => settle({ ok: false, error: { code: 'timeout', message: 'The Companion Apps manager did not respond. Reload the chartplotter.' } }),
+    REPLY_TIMEOUT_MS
+  )
+  pending.set(reqId, { settle, timer })
+  client.publish(topic, { v: VERSION, reqId, ...params }, SCOPE).catch((err) => {
+    settle({ ok: false, error: { code: 'bus', message: err.message } })
   })
   return reqId
+}
+
+// Re-read the list, the installed webapps and the user's rights (e.g. after
+// logging in once the chartplotter was already loaded).
+let refreshing = false
+function refresh() {
+  if (refreshing || !snap) return
+  refreshing = true
+  render()
+  send(T.reload, {}, () => {
+    refreshing = false
+    render()
+  })
 }
 
 let helloTimer = null
@@ -98,10 +124,7 @@ function onMessage(topic, params) {
     // in; its state lives in `form`, so only the list follows snapshots.
     if (view === 'list') render()
   } else if (topic === T.reply) {
-    const cb = pending.get(params.reqId)
-    if (!cb) return
-    pending.delete(params.reqId)
-    cb(params)
+    pending.get(params.reqId)?.settle(params)
   }
 }
 
@@ -193,8 +216,12 @@ function render() {
   else renderList()
 }
 
-function banner(text, kind = 'info') {
-  return h('div', { class: `banner ${kind}`, role: kind === 'error' ? 'alert' : 'status' }, text)
+function banner(text, kind = 'info', ...extra) {
+  return h('div', { class: `banner ${kind}`, role: kind === 'error' ? 'alert' : 'status' }, text, ...extra)
+}
+
+function retryButton() {
+  return h('button', { class: 'link-btn', disabled: refreshing, onclick: refresh }, refreshing ? 'Checking…' : 'Check again')
 }
 
 function entryIcon(entry) {
@@ -218,7 +245,7 @@ function renderList() {
     launcher.append(h('p', { class: 'muted' }, 'Loading…'))
     return
   }
-  if (snap.problem) launcher.append(banner(snap.problem, 'error'))
+  if (snap.problem) launcher.append(banner(snap.problem, 'error', retryButton()))
   if (snap.needsReload) launcher.append(banner('Reload the chartplotter to update the toolbar buttons.'))
   if (listError) launcher.append(banner(listError, 'error'))
 
@@ -290,7 +317,9 @@ function renderList() {
     )
   )
   launcher.append(list)
-  if (!snap.canEdit) launcher.append(h('p', { class: 'muted small' }, snap.editReason ?? 'Editing is unavailable.'))
+  if (!snap.canEdit) {
+    launcher.append(h('p', { class: 'muted small' }, snap.editReason ?? 'Editing is unavailable.', ' ', retryButton()))
+  }
   if (snap.entries.length === 0) {
     launcher.append(
       h('p', { class: 'muted small' }, 'Add a webapp or a web page to show it in a window over the chart or in this side panel.')
@@ -589,12 +618,16 @@ function renderForm() {
 
   // 3. Show in
   const pickShowIn = (v) => {
+    if (v === f.showIn) return
+    // Side-panel apps never open at startup; keep the window choice (even
+    // "Never open") in case the user switches back.
+    if (v === 'panel') {
+      f.windowStartup = f.startup
+      f.startup = 'never'
+    } else {
+      f.startup = f.windowStartup ?? 'remember'
+    }
     f.showIn = v
-    // Side-panel apps never open at startup; keep the window choice in case
-    // the user switches back.
-    if (v === 'panel' && f.startup !== 'never') f.windowStartup = f.startup
-    if (v === 'panel') f.startup = 'never'
-    else if (f.startup === 'never' && f.windowStartup !== 'never') f.startup = f.windowStartup ?? 'remember'
     renderForm()
   }
   launcher.append(
@@ -704,7 +737,10 @@ async function main() {
   if (hasVisibility) {
     const own = client.context.id
     await client.subscribe(['panel.state'], (_n, p) => {
-      if (p?.panel === own) frames.setVisible(p.visible !== false)
+      if (p?.panel !== own) return
+      frames.setVisible(p.visible !== false)
+      // Showing the App Manager: pick up a login or list change made since.
+      if (p.visible !== false && snap?.panelApp === null) refresh()
     })
     try {
       const mine = (await client.panels.list()).find((p) => p.panel === own)

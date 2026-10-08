@@ -35,7 +35,6 @@
   "devDependencies": {
     "@material-design-icons/svg": "^0.14.15",
     "esbuild": "^0.28.0",
-    "express": "^5.2.1",
     "signalk-plotterext-bus": "^0.18.0"
   },
   "signalk-plugin-enabled-by-default": true,

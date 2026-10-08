@@ -64,7 +64,9 @@ export function createFrames({ container, launcher, doc = document, hasVisibilit
     urls = snap.urls ?? {}
     for (const [id, f] of [...frames]) {
       if (!entries.has(id) || !isAllowedUrl(urls[id])) drop(id)
-      else if (loaded.get(id) !== urls[id]) {
+      else {
+        f.title = entries.get(id).name
+        if (loaded.get(id) === urls[id]) continue
         f.src = urls[id]
         loaded.set(id, urls[id])
       }

@@ -15,13 +15,14 @@ const path = require('path')
 const { PLUGIN_ID, ASSET_BASE, buildManifest } = require('./manifest')
 const { createStore, StaleRevisionError } = require('./store')
 const { ValidationError } = require('./validate')
+const { serveStatic } = require('./static')
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public')
 const pkg = require('../package.json')
 
 module.exports = (app) => {
   let store = null
-  let providerRegistered = false
+  let loaded = false
   let assetsMounted = false
   let running = false
   // Who may change the list: 'readwrite' where the server supports
@@ -36,23 +37,32 @@ module.exports = (app) => {
     return store
   }
 
+  // The list is read before its first use and never written until a read has
+  // succeeded: the routes exist even while the plugin is stopped, and a write
+  // after a failed read would replace a file that could not be read.
+  const ensureLoaded = () => {
+    if (loaded) return true
+    try {
+      getStore().load()
+      loaded = true
+    } catch (err) {
+      app.error(`could not read the app list: ${err.message}`)
+    }
+    return loaded
+  }
+
   const mountAssets = () => {
     if (assetsMounted || typeof app.use !== 'function') return
-    let serveStatic
-    try {
-      serveStatic = require('express').static
-    } catch {
-      app.error(`express unavailable; cannot serve ${ASSET_BASE}`)
-      return
-    }
     app.use(ASSET_BASE, serveStatic(PUBLIC_DIR))
     assetsMounted = true
   }
 
-  const manifest = () => buildManifest(getStore().get().apps, pkg.version)
+  const manifest = () => buildManifest(ensureLoaded() ? getStore().get().apps : [], pkg.version)
 
+  // On every start: the server unregisters a plugin's resource providers when
+  // it stops, so a provider registered only once would vanish after the user
+  // disables and re-enables the plugin or saves its configuration.
   const registerProvider = () => {
-    if (providerRegistered) return
     if (typeof app.registerResourceProvider !== 'function') {
       app.error('server has no resource provider registry')
       return
@@ -73,10 +83,12 @@ module.exports = (app) => {
         }
       }
     })
-    providerRegistered = true
   }
 
+  const unavailable = (res) => res.status(503).json({ message: 'The app list could not be read; see the server log.' })
+
   const getApps = (req, res) => {
+    if (!ensureLoaded()) return unavailable(res)
     const { revision, apps } = getStore().get()
     res.json({ revision, apps, editLevel })
   }
@@ -87,6 +99,7 @@ module.exports = (app) => {
       res.status(400).json({ message: 'Expected { revision, apps }.' })
       return
     }
+    if (!ensureLoaded()) return unavailable(res)
     try {
       const { revision } = getStore().save(body.revision, body.apps)
       res.json({ revision })
@@ -122,11 +135,7 @@ module.exports = (app) => {
     },
 
     start() {
-      try {
-        getStore().load()
-      } catch (err) {
-        app.error(`could not read the app list: ${err.message}`)
-      }
+      ensureLoaded()
       running = true
       mountAssets()
       registerProvider()

@@ -227,9 +227,14 @@ export function createManager({ client, api, hostName = null, embedded = false, 
         await client.windows.update({ windowId: w.windowId, visible: true })
         setWin(entry.id, { windowId: w.windowId, status: 'open' })
         await client.windows.focus(w.windowId).catch(() => {})
-      } catch {
-        // the window vanished: open a new one
-        await openWindow(entry)
+      } catch (err) {
+        if (reasonOf(err) === 'windows.unknownId') {
+          // the window is gone (e.g. reclaimed by the host): open a new one
+          await openWindow(entry)
+        } else {
+          // it may still exist: opening another could leave two windows
+          setWin(entry.id, { windowId: w.windowId, status: 'hidden', error: err.message || 'could not show' })
+        }
       }
     } else {
       await openWindow(entry)
@@ -489,7 +494,9 @@ export function createManager({ client, api, hostName = null, embedded = false, 
     if (!isV1(params)) return
     switch (topic) {
       case T.hello:
-        publishSnapshot()
+        // queued behind startup, so a side panel opened while the list is
+        // still loading does not see an empty list first
+        serial(publishSnapshot)
         break
       case T.toggle:
         serial(() => toggle(params.entryId ?? null))

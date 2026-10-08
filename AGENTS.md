@@ -142,8 +142,13 @@ server; the manual test plan is in `REQUIREMENTS.md`.
   Do not add the `signalk-webapp` keyword: these pages only work inside a host
   iframe and must not appear in the Webapps launcher.
 - **No server-side runtime dependencies.** The bus is bundled into the browser
-  assets; `express` is provided by the Signal K server. Both are
-  devDependencies at their published npm semver range, never a `file:` path.
+  assets as a devDependency at its published npm semver range, never a
+  `file:` path. Do not `require('express')`: a plugin installed in
+  `~/.signalk/node_modules` cannot rely on resolving the server's copy, so
+  `public/` is served by `plugin/static.js`.
+- **Register the resource provider on every `start()`.** The server
+  unregisters it on every stop; a register-once latch loses the manifest
+  after a disable/enable or a configuration save.
   If you develop against a local bus checkout, regenerate the lockfile from
   the registry before committing and confirm it has no relative-path entries.
 - **Rebuild `public/` after any `src/web` edit** so a linked test server

@@ -51,7 +51,12 @@ function fakeClient({ openApps = {}, limit = Infinity } = {}) {
       },
       async update(p) {
         c.log.push(['update', p])
-        if (!c.openWins.has(p.windowId)) throw new Error('unknown')
+        if (c.failUpdate) throw new Error(c.failUpdate)
+        if (!c.openWins.has(p.windowId)) {
+          const e = new Error('unknown window')
+          e.data = { reason: 'windows.unknownId' }
+          throw e
+        }
         return { windowId: p.windowId, visible: p.visible !== false }
       },
       async focus(id) {
@@ -203,7 +208,7 @@ test('windows.limit gives the remaining entries an error', async () => {
   assert.strictEqual(s.c.error, MESSAGES.limit)
 })
 
-test('check / uncheck with unload and hide', async () => {
+test('bring up / take down with unload and hide', async () => {
   const { m, client } = await setup({ apps: [entry('u'), entry('h', { closeBehavior: 'hide' })] })
   await send(m, client, T.setOpen, { entryId: 'u', open: true })
   assert.strictEqual(stateOf(client, 'u'), 'open')
@@ -453,4 +458,46 @@ test('an embedded chartplotter applies no startup options and keeps openApps unt
   await m.idle()
   assert.strictEqual(client.ops('open').length, 1, 'the user can still open apps')
   assert.deepStrictEqual(client.stateValues.openApps, { a: true })
+})
+
+test('showing a hidden window: reopen only when the host no longer has it', async () => {
+  const { m, client } = await setup({ apps: [entry('h', { closeBehavior: 'hide' })] })
+  await send(m, client, T.setOpen, { entryId: 'h', open: true })
+  await send(m, client, T.setOpen, { entryId: 'h', open: false })
+  // the host reclaimed it
+  client.openWins.clear()
+  await send(m, client, T.setOpen, { entryId: 'h', open: true })
+  assert.strictEqual(client.ops('open').length, 2)
+  assert.strictEqual(stateOf(client, 'h'), 'open')
+
+  await send(m, client, T.setOpen, { entryId: 'h', open: false })
+  client.failUpdate = 'call timed out'
+  await send(m, client, T.setOpen, { entryId: 'h', open: true })
+  assert.strictEqual(client.ops('open').length, 2, 'no second window while the first may still exist')
+  assert.strictEqual(stateOf(client, 'h'), 'hidden')
+  assert.strictEqual(client.lastSnapshot().status.h.error, 'call timed out')
+  assert.strictEqual(client.replies().at(-1).ok, false)
+})
+
+test('hello is answered after startup has loaded the list', async () => {
+  const client = fakeClient()
+  const api = fakeApi({ apps: [entry('a')] })
+  let release
+  const gate = new Promise((r) => (release = r))
+  const realLoad = api.loadApps
+  api.loadApps = async () => {
+    await gate
+    return realLoad()
+  }
+  const m = createManager({ client, api, setTimer: () => {} })
+  const started = m.start()
+  await new Promise((r) => setTimeout(r, 0))
+  client.emit(T.hello, { v: 1 })
+  await new Promise((r) => setTimeout(r, 0))
+  assert.strictEqual(client.snapshots().length, 0, 'no empty snapshot while loading')
+  release()
+  await started
+  await m.idle()
+  assert.ok(client.snapshots().length >= 1)
+  assert.ok(client.snapshots().every((snap) => snap.entries.length === 1))
 })

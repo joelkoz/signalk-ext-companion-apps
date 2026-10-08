@@ -164,3 +164,40 @@ test('package metadata (§11)', () => {
   assert.strictEqual(pkg.dependencies, undefined)
   for (const [, range] of Object.entries(pkg.devDependencies)) assert.ok(!range.startsWith('file:'))
 })
+
+test('the provider is registered again on every start (the server drops it on stop)', async () => {
+  const { app, plugin } = setup()
+  // what signalk-server does on stop: app.resourcesApi.unRegister(plugin.id)
+  app.calls.providers.length = 0
+  plugin.stop()
+  plugin.start({})
+  assert.strictEqual(app.calls.providers.length, 1)
+  const list = await app.calls.providers[0].methods.listResources({})
+  assert.ok(list['signalk-ext-companion-apps'])
+})
+
+test('routes read the stored list even while the plugin is stopped', async () => {
+  const app = fakeApp()
+  fs.writeFileSync(path.join(app.dir, 'apps.json'), JSON.stringify({ version: 1, revision: 4, apps: [entry('a')] }))
+  const plugin = require('../plugin/index.js')(app)
+  const { router, routes } = fakeRouter({ withAccess: true })
+  plugin.registerWithRouter(router) // registered at load; start() never runs
+  const got = await call(routes['GET /apps'])
+  assert.strictEqual(got.body.revision, 4)
+  // a stale PUT is refused instead of replacing the stored list
+  assert.strictEqual((await call(routes['PUT /apps'], { revision: 0, apps: [] })).status, 409)
+})
+
+test('an unreadable list is never overwritten: 503 until it can be read', async () => {
+  const app = fakeApp()
+  const file = path.join(app.dir, 'apps.json')
+  fs.mkdirSync(file) // reading a directory fails with EISDIR, which is not "missing"
+  const plugin = require('../plugin/index.js')(app)
+  const { router, routes } = fakeRouter({ withAccess: true })
+  plugin.registerWithRouter(router)
+  plugin.start({})
+  assert.strictEqual((await call(routes['GET /apps'])).status, 503)
+  assert.strictEqual((await call(routes['PUT /apps'], { revision: 0, apps: [] })).status, 503)
+  assert.ok(fs.statSync(file).isDirectory())
+  assert.ok(app.calls.errors.length > 0)
+})
