@@ -73,6 +73,7 @@ function fakeClient({ openApps = {}, titleBars, limit = Infinity } = {}) {
         return { ...c.stateValues }
       },
       async set(v) {
+        if (c.failSet) throw new Error('state write failed')
         Object.assign(c.stateValues, v)
       }
     },
@@ -587,4 +588,28 @@ test('title bar: an embedded chartplotter honours and stores the choice', async 
   client.emit(T.setTitleBar, { v: 1, reqId: 'r2', entryId: 'b', titleBar: 'autoHide' })
   await m.idle()
   assert.deepStrictEqual(client.stateValues.titleBars, { a: 'autoHide', b: 'autoHide' })
+})
+
+test('title bar: a choice made in another context on this device is kept', async () => {
+  const { m, client } = await setup({ apps: [entry('a'), entry('b')] })
+  // another tab or an embedded chartplotter stored a choice after this one started
+  client.stateValues.titleBars = { a: 'autoHide' }
+  await send(m, client, T.setTitleBar, { entryId: 'b', titleBar: 'autoHide' })
+  assert.deepStrictEqual(client.stateValues.titleBars, { a: 'autoHide', b: 'autoHide' })
+  assert.strictEqual(client.lastSnapshot().status.a.titleBar, 'autoHide')
+  client.stateValues.titleBars = { b: 'autoHide' } // the other context switched a back
+  await send(m, client, T.setTitleBar, { entryId: 'b', titleBar: 'fixed' })
+  assert.deepStrictEqual(client.stateValues.titleBars, {})
+})
+
+test('title bar: a choice that cannot be stored changes nothing and replies with an error', async () => {
+  const { m, client } = await setup({ apps: [entry('a', { startup: 'always' })] })
+  client.failSet = true
+  await send(m, client, T.setTitleBar, { entryId: 'a', titleBar: 'autoHide' })
+  const r = client.replies().at(-1)
+  assert.strictEqual(r.ok, false)
+  assert.deepStrictEqual(r.error, { code: 'state', message: MESSAGES.titleBarNotSaved })
+  assert.strictEqual(client.ops('open').length, 1, 'the window is not reopened')
+  assert.strictEqual(client.ops('close').length, 0)
+  assert.strictEqual(client.lastSnapshot().status.a.titleBar, 'fixed')
 })

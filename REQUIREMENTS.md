@@ -373,14 +373,20 @@ gets to a kiosk view.
   only ever written by an explicit user action.
 - **Open**: `ui.openWindow` carries `titleBar: 'autoHide'` for such an entry
   and leaves the field out otherwise.
-- **`setTitleBar`** (§5.1): store the choice (dropping ids of entries that no
-  longer exist), then, if the entry has a live window (`open` or `hidden`),
+- **`setTitleBar`** (§5.1): store the choice, then, if the entry has a live
+  window (`open` or `hidden`),
   close it and reopen it in the same visible/hidden state: `ui.updateWindow`
   cannot change `titleBar`, so the page reloads; `restoreKey` keeps its
   place. A closed window just opens with it next time. Same value → nothing.
   Unknown entry, side-panel entry or a value other than `fixed` / `autoHide`
   → error reply, nothing stored. A reopen that fails (e.g. `windows.limit`)
   leaves the entry in `error` and replies with that error.
+- **Storing**: every context of the extension on this device (another tab,
+  an embedded chartplotter) shares `titleBars`, so the manager re-reads it
+  right before each write and changes only the one entry (dropping ids of
+  entries that no longer exist), never writing back a stale copy. If the
+  write fails, nothing changes (no reopen) and `setTitleBar` replies with an
+  error ("could not be saved on this device").
 - **Delete** drops the entry's choice.
 
 ## 5. Bus protocol
@@ -786,7 +792,9 @@ Window entries are not in the cycle: they are not shown in the side panel.
   - title bar (§4.10): `autoHide` from state reaches `openWindow` (and the
     default is not sent) and the snapshot; `setTitleBar` reopens an open
     window open and a hidden one hidden, only remembers it for a closed
-    one, does nothing for the same value, never saves the list; unknown,
+    one, does nothing for the same value, never saves the list; keeps a
+    choice another context stored meanwhile; a failed state write changes
+    nothing and replies with an error; unknown,
     side-panel and malformed requests refused; a failed reopen replies with
     the error; deleted entries' choices dropped; an embedded chartplotter
     applies and stores it;
