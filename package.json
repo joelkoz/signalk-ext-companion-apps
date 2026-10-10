@@ -1,6 +1,6 @@
 {
   "name": "signalk-ext-companion-apps",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Show webapps in floating windows over the chart or in the side panel of a plotterExtensions-capable chartplotter",
   "main": "plugin/index.js",
   "keywords": [
@@ -42,12 +42,12 @@
   "signalk-plugin-enabled-by-default": true,
   "signalk": {
     "appIcon": "src/web/assets/companion-apps.png",
-    "displayName": "Companion Apps",
+    "displayName": "Freeboard Companion Apps",
     "screenshots": [
       "./docs/screenshots/1_companion_apps.jpg"
     ],
     "appstore": {
-      "displayName": "Companion Apps",
+      "displayName": "Freeboard Companion Apps",
       "categories": [
         "chart-plotters"
       ],
