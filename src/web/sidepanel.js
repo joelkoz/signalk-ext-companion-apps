@@ -751,7 +751,7 @@ function renderForm() {
             'p',
             { class: 'hint' },
             f.titleBar === 'autoHide'
-              ? 'The title bar fades away when not in use; touch or hover the top edge of the window to bring it back. '
+              ? 'The title bar fades away when not in use; touch or hover the top edge of the window to bring it back. On a phone-width screen the chartplotter always shows it. '
               : '',
             'Set for this device only; also the window icon in the app list.'
           )

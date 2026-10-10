@@ -388,6 +388,12 @@ gets to a kiosk view.
   write fails, nothing changes (no reopen) and `setTitleBar` replies with an
   error ("could not be saved on this device").
 - **Delete** drops the entry's choice.
+- **The host may ignore it.** A host may present a window as a `sheet` or
+  `fullscreen` instead of `floating` when it would not fit (the API spec,
+  *Windows*). Freeboard-SK does below a 600 px wide window area (phones) and
+  auto-hides the title bar only while a window is floating, so a sheet keeps
+  its title bar. The extension still sends `titleBar: 'autoHide'`: the host
+  applies it again when the window floats. Nothing to do here; document it.
 
 ## 5. Bus protocol
 
@@ -706,7 +712,9 @@ Window entries are not in the cycle: they are not shown in the side panel.
   that device before turning kiosk mode on.
 - **Hiding a window's title bar** is per device, makes it fade when idle
   rather than disappear (the host keeps a way back and the close control),
-  and reloads an open window when switched.
+  and reloads an open window when switched. On a phone-width screen
+  Freeboard-SK shows windows as bottom sheets, which always keep their title
+  bar (§4.10).
 - **"Remember last" is per device**; two chartplotter tabs in the same
   browser share it.
 - **Migrating from Freeboard's Instruments drawer**: add the app with *Show
