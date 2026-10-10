@@ -181,9 +181,10 @@ export function createManager({ client, api, hostName = null, embedded = false, 
   // is the user's explicit act on this device, so unlike openApps an embedded
   // chartplotter writes it too. Other contexts on this device (another tab, an
   // embedded chartplotter) share the map, so it is re-read right before the
-  // write and only this entry changes; entries deleted here or elsewhere are
-  // dropped on the way. Returns whether the write succeeded; on failure
-  // nothing changes.
+  // write and only this entry changes. Other ids are kept even when this
+  // manager does not know them: its list may be older than the tab that
+  // stored them. A deleted entry's choice goes with the delete. Returns
+  // whether the write succeeded; on failure nothing changes.
   async function storeTitleBar(entryId, mode) {
     let base = s.titleBars
     try {
@@ -192,7 +193,7 @@ export function createManager({ client, api, hostName = null, embedded = false, 
       // keep the copy loaded at startup
     }
     const next = {}
-    for (const [id, m] of Object.entries(base)) if (m === 'autoHide' && id !== entryId && byId(id)) next[id] = m
+    for (const [id, m] of Object.entries(base)) if (m === 'autoHide' && id !== entryId) next[id] = m
     if (mode === 'autoHide') next[entryId] = mode
     try {
       await client.state.set({ titleBars: next }, 'extension')
@@ -441,7 +442,7 @@ export function createManager({ client, api, hostName = null, embedded = false, 
     if (!res.ok) return res
     s.entries = apps
     await reconcile(old, apps)
-    if (s.titleBars[entryId]) await storeTitleBar(entryId, null) // best effort
+    await storeTitleBar(entryId, null) // best effort; another tab may have set it
     return { ok: true }
   }
 

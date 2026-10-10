@@ -566,16 +566,25 @@ test('title bar: refused for unknown, side-panel and malformed requests', async 
 })
 
 test('title bar: a failed reopen is reported; deleting an entry drops its choice', async () => {
-  const { m, client } = await setup({ apps: [entry('a', { startup: 'always' }), entry('b')], titleBars: { gone: 'autoHide' }, limit: 1 })
+  const { m, client } = await setup({ apps: [entry('a', { startup: 'always' }), entry('b')], titleBars: { other: 'autoHide' }, limit: 1 })
   // the replacement does not fit (another extension took the slot meanwhile)
   client.openWins.set('other', {})
   await send(m, client, T.setTitleBar, { entryId: 'a', titleBar: 'autoHide' })
   assert.strictEqual(stateOf(client, 'a'), 'error')
   assert.strictEqual(client.replies().at(-1).error.code, 'open')
-  assert.deepStrictEqual(client.stateValues.titleBars, { a: 'autoHide' }, 'stale ids pruned')
+  assert.deepStrictEqual(
+    client.stateValues.titleBars,
+    { other: 'autoHide', a: 'autoHide' },
+    'an id this manager does not know is kept: another tab may have a newer list'
+  )
 
   await send(m, client, T.deleteEntry, { entryId: 'a' })
-  assert.deepStrictEqual(client.stateValues.titleBars, {})
+  assert.deepStrictEqual(client.stateValues.titleBars, { other: 'autoHide' })
+
+  // a choice another tab set for an entry deleted here goes with the delete
+  client.stateValues.titleBars = { other: 'autoHide', b: 'autoHide' }
+  await send(m, client, T.deleteEntry, { entryId: 'b' })
+  assert.deepStrictEqual(client.stateValues.titleBars, { other: 'autoHide' })
 })
 
 test('title bar: an embedded chartplotter honours and stores the choice', async () => {

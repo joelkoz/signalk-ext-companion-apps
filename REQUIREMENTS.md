@@ -383,11 +383,13 @@ gets to a kiosk view.
   leaves the entry in `error` and replies with that error.
 - **Storing**: every context of the extension on this device (another tab,
   an embedded chartplotter) shares `titleBars`, so the manager re-reads it
-  right before each write and changes only the one entry (dropping ids of
-  entries that no longer exist), never writing back a stale copy. If the
+  right before each write and changes only the one entry, never writing back
+  a stale copy. It keeps ids it does not know: its list may be older than
+  the tab that stored them. If the
   write fails, nothing changes (no reopen) and `setTitleBar` replies with an
   error ("could not be saved on this device").
-- **Delete** drops the entry's choice.
+- **Delete** drops the entry's choice (re-read first, since another tab may
+  have set it).
 - **The host may ignore it.** A host may present a window as a `sheet` or
   `fullscreen` instead of `floating` when it would not fit (the API spec,
   *Windows*). Freeboard-SK does below a 600 px wide window area (phones) and
@@ -807,7 +809,9 @@ Window entries are not in the cycle: they are not shown in the side panel.
     window open and a hidden one hidden, only remembers it for a closed
     one, does nothing for the same value, never saves the list; keeps a
     choice another context stored meanwhile; a failed state write changes
-    nothing and replies with an error; unknown,
+    nothing and replies with an error; ids this manager does not know are
+    kept, and a delete drops the entry's choice even when another context
+    set it; unknown,
     side-panel and malformed requests refused; a failed reopen replies with
     the error; deleted entries' choices dropped; an embedded chartplotter
     applies and stores it;
@@ -864,11 +868,12 @@ Windows:
     error; hidden windows are reclaimed first and their buttons read Open.
 11. Phone-width viewport → windows become sheets; the buttons still follow.
 11a. Title bar: the configuration form's *Title bar* → *Hide when idle*,
-    Save → the open window reloads bare; a new entry saved with it opens
-    bare. Press the row's window icon on an open window → it reloads
-    in place with a title bar that fades when idle, and the grip brings it
-    back; on a hidden window it stays hidden. Reload → still bare. A second
-    device still shows the title bar. A read-only user can switch it.
+    Save → the open window reloads in place with a title bar that fades when
+    idle, and the grip brings it back; a new entry saved with it opens the
+    same way. Reload → still fading. A second device still shows the title
+    bar. The row's window icon toggles it: press it on that open window → it
+    reloads with a fixed title bar; press again → fading again; on a hidden
+    window it stays hidden. A read-only user can use the icon.
 
 Side panel and buttons (the #883 replacement):
 
