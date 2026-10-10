@@ -380,6 +380,7 @@ function openForm(entry) {
       showIn: entry.showIn,
       closeBehavior: entry.closeBehavior,
       startup: entry.startup,
+      titleBar: snap?.status[entry.id]?.titleBar ?? 'fixed',
       icon: entry.icon ?? '',
       error: null,
       busy: false,
@@ -398,6 +399,7 @@ function openForm(entry) {
       showIn: 'window',
       closeBehavior: 'unload',
       startup: 'remember',
+      titleBar: 'fixed',
       icon: '',
       error: null,
       busy: false,
@@ -446,11 +448,26 @@ function save() {
   send(T.saveEntry, { entry }, (r) => {
     if (form !== f) return
     f.busy = false
-    if (r.ok) closeForm()
-    else {
+    if (r.ok) {
+      applyTitleBar(r.entryId ?? f.id, f)
+      closeForm()
+    } else {
       f.error = r.error?.message ?? 'Saving failed.'
       renderForm()
     }
+  })
+}
+
+// The form's Title bar field is not part of the entry (it is per device,
+// §4.10): once the entry is saved, it goes to the window manager like the
+// row's switch.
+function applyTitleBar(entryId, f) {
+  if (!entryId || f.showIn !== 'window') return
+  if ((snap?.status[entryId]?.titleBar ?? 'fixed') === f.titleBar) return
+  send(T.setTitleBar, { entryId, titleBar: f.titleBar }, (r) => {
+    if (r.ok) return
+    listError = `${f.name}: ${r.error?.message ?? 'failed'}`
+    if (view === 'list') render()
   })
 }
 
@@ -716,7 +733,34 @@ function renderForm() {
     )
   }
 
-  // 6. Toolbar button
+  // 6. Title bar (windows only; per device, §4.10)
+  if (f.showIn === 'window') {
+    const pickTitleBar = (v) => {
+      f.titleBar = v
+      renderForm()
+    }
+    launcher.append(
+      field(
+        'Title bar',
+        h(
+          'div',
+          { class: 'choice' },
+          radio('titleBar', 'fixed', f.titleBar, 'Always shown', pickTitleBar),
+          radio('titleBar', 'autoHide', f.titleBar, 'Hide when idle', pickTitleBar),
+          h(
+            'p',
+            { class: 'hint' },
+            f.titleBar === 'autoHide'
+              ? 'The title bar fades away when not in use; touch or hover the top edge of the window to bring it back. '
+              : '',
+            'Set for this device only; also the window icon in the app list.'
+          )
+        )
+      )
+    )
+  }
+
+  // 7. Toolbar button
   launcher.append(
     field(
       'Toolbar button',
@@ -727,7 +771,7 @@ function renderForm() {
 
   if (f.error) launcher.append(banner(f.error, 'error'))
 
-  // 7. Save / Cancel / Delete
+  // 8. Save / Cancel / Delete
   const actions = h('div', { class: 'actions' })
   if (f.confirmDelete) {
     actions.append(

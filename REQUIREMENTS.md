@@ -555,9 +555,8 @@ launcher. The main toolbar button shows it
     through and highlighted while the title bar hides when idle, with
     `aria-pressed`; it says when the open window will reload, sends
     `setTitleBar` and is disabled until the reply), and an **(i)** button
-    opening the entry's configuration. The switch is on the row, not in the
-    configuration form, because it is per device: the form edits the boat's
-    list, needs edit rights and has Save / Cancel.
+    opening the entry's configuration. It is on the row because it is per
+    device and needs no edit rights; the form has the same choice (item 6).
   - **Side-panel entry**: an **Open** button in the same place (the app
     takes the launcher's place in the side panel; the main button brings the
     launcher back), name, a "side panel" hint, and **(i)**. Open sends
@@ -585,7 +584,13 @@ launcher. The main toolbar button shows it
      not shown".
   5. **At startup** (windows only; hidden for side-panel apps): *Always
      open* / *Remember last* / *Never open*.
-  6. **Toolbar button**: a drop-down list (like Freeboard-SK's note icon
+  6. **Title bar** (windows only): *Always shown* / *Hide when idle*, with
+     a hint that it is set for this device only. Initialised from the
+     snapshot's `titleBar`; it is not part of the entry: after a successful
+     **Save** the launcher sends `setTitleBar` (with the reply's `entryId`
+     for a new entry) when it differs from the snapshot. A failure shows on
+     the list.
+  7. **Toolbar button**: a drop-down list (like Freeboard-SK's note icon
      picker) of *None* and a curated list of Material icons, each shown as
      the icon and a short name (Speed, Dashboard, Waves, Sailing, Boat,
      Anchor, Compass, Map, Radar, Satellite, Wind, Weather, Temperature,
@@ -600,7 +605,7 @@ launcher. The main toolbar button shows it
      button appears after the chartplotter is reloaded. Symbols from the
      Signal K symbols resource are a possible later addition, once the
      Plotter Extensions API defines the button's reserved `symbol` field.
-  7. **Save**, **Cancel**, and for an existing entry **Delete** (with an
+  8. **Save**, **Cancel**, and for an existing entry **Delete** (with an
      inline confirmation: the sandbox has no `confirm()` dialog).
 - The launcher never stores window or side-panel state; it renders the latest
   snapshot. While the configuration form is open, snapshots update its state
@@ -850,7 +855,9 @@ Windows:
 10. Open more windows than the host allows → the extra entry shows the limit
     error; hidden windows are reclaimed first and their buttons read Open.
 11. Phone-width viewport → windows become sheets; the buttons still follow.
-11a. Title bar: press the row's window icon on an open window → it reloads
+11a. Title bar: the configuration form's *Title bar* → *Hide when idle*,
+    Save → the open window reloads bare; a new entry saved with it opens
+    bare. Press the row's window icon on an open window → it reloads
     in place with a title bar that fades when idle, and the grip brings it
     back; on a hidden window it stays hidden. Reload → still bare. A second
     device still shows the title bar. A read-only user can switch it.

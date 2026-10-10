@@ -523,6 +523,7 @@ test('title bar: setTitleBar reopens a live window in its state and remembers th
   await send(m, client, T.setTitleBar, { entryId: 'a', titleBar: 'autoHide' })
   assert.deepStrictEqual(client.ops('close'), [w1])
   assert.strictEqual(client.ops('open').at(-1).titleBar, 'autoHide')
+  assert.strictEqual(client.ops('open').at(-1).restoreKey, 'a', 'reopens in its remembered place')
   assert.strictEqual(client.ops('open').at(-1).visible, undefined, 'an open window stays open')
   assert.strictEqual(stateOf(client, 'a'), 'open')
   assert.deepStrictEqual(client.stateValues.titleBars, { a: 'autoHide' })

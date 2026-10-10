@@ -37,6 +37,8 @@ plotter extensions with floating windows, such as Freeboard-SK 3.3.0 or later.
 - **At startup** (windows only): *Always open*, *Never open*, or *Remember
   last*, which reopens the windows that were open when you last used this
   device. Side-panel apps open only when you open them.
+- **Title bar** (windows only): *Always shown*, or *Hide when idle* for a
+  cleaner, kiosk-like window (see below).
 - **Toolbar button**: pick an icon to give the app its own toolbar button.
   The button appears after you reload the chartplotter.
 
@@ -46,12 +48,13 @@ plotter extensions with floating windows, such as Freeboard-SK 3.3.0 or later.
   **Open**, then **Close** (or **Hide**, for apps set to *Hide*) while the
   window is on screen, and **Show** for a hidden one. Drag and resize windows as you like; each one remembers its place
   on each device. The window's own close button does the same as **Close** / **Hide**.
-- **Hide the title bar**: the window icon next to a window app makes its
+- **Hide the title bar**: *Title bar: Hide when idle* in the app's settings,
+  or the window icon next to a window app in the list, makes its
   title bar fade away when you are not using it, for a cleaner, kiosk-like
   view; touch or hover the top edge to bring it back. It is set **per
   device**, so the helm tablet can show bare windows while the laptop keeps
-  its title bars, and it needs no login. An open window reloads when you
-  switch it.
+  its title bars. The window icon works without a login. An open window
+  reloads when you switch it.
 - **Side panel**: press **Open** next to an app. It takes the App Manager's
   place in the side panel, which shows one app at a time. A bar at the top of
   the side panel steps through the App Manager and your side-panel apps with
