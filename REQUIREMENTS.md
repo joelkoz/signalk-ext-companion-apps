@@ -181,6 +181,7 @@ every window method, and every `ui.openPanel` / `ui.togglePanel` for
   it (§4.7);
 - per window entry: `windowId` (or none) and a `status` of `closed` | `open` |
   `hidden` | `error` (with a message);
+- `titleBars` — the per-device title-bar choice (§4.10);
 - `panelApp` — the side-panel entry the side panel shows, or `null` for the
   launcher (the initial value).
 
@@ -355,6 +356,33 @@ observe its own visibility:
   current *Unload* app's frame is removed, and recreated when it is shown
   again. Without it, the current app keeps running while the drawer is closed.
 
+### 4.10 Title bar (per device)
+
+A window entry's title bar is either `fixed` (the host default) or
+`autoHide`: the host's title bar floats over the page and fades when idle,
+and the host keeps a grip that brings it back (`ui.openWindow` `titleBar`).
+The host's close control never goes away, so this is the closest a window
+gets to a kiosk view.
+
+- **Per device, not per boat.** A helm tablet wants bare windows; the laptop
+  at the chart table wants title bars to drag. The choice lives in
+  extension-scope state as `titleBars` (`{ [entryId]: 'autoHide' }`; absent
+  means `fixed`), next to `openApps`, never in the server list. Changing it
+  needs no edit rights, like opening and closing apps. An embedded
+  chartplotter (§4.2) applies it and writes it too: unlike `openApps`, it is
+  only ever written by an explicit user action.
+- **Open**: `ui.openWindow` carries `titleBar: 'autoHide'` for such an entry
+  and leaves the field out otherwise.
+- **`setTitleBar`** (§5.1): store the choice (dropping ids of entries that no
+  longer exist), then, if the entry has a live window (`open` or `hidden`),
+  close it and reopen it in the same visible/hidden state: `ui.updateWindow`
+  cannot change `titleBar`, so the page reloads; `restoreKey` keeps its
+  place. A closed window just opens with it next time. Same value → nothing.
+  Unknown entry, side-panel entry or a value other than `fixed` / `autoHide`
+  → error reply, nothing stored. A reopen that fails (e.g. `windows.limit`)
+  leaves the entry in `error` and replies with that error.
+- **Delete** drops the entry's choice.
+
 ## 5. Bus protocol
 
 The side panel, the toolbar buttons and the window manager talk over the host
@@ -387,6 +415,7 @@ To the window manager:
 | `hello` | side panel | — | Publish a snapshot. |
 | `setOpen` | side panel | `reqId`, `entryId`, `open` | Window entry: §4.3. Side-panel entry, or `null` for the launcher, with `open: true`: show it (§4.9). |
 | `toggle` | buttons | `entryId` | §4.8. No reply. |
+| `setTitleBar` | side panel | `reqId`, `entryId`, `titleBar` (`fixed` \| `autoHide`) | §4.10. |
 | `saveEntry` | side panel | `reqId`, `entry` | §4.5 (add when `entry.id` is absent). |
 | `deleteEntry` | side panel | `reqId`, `entryId` | §4.5. |
 | `reload` | side panel | `reqId` | Re-fetch the list, the installed webapps and the user's rights (`canEdit`), then reconcile. Sent by the launcher's **Check again** (on the list-problem banner and the "editing unavailable" note) and, with `panels.state`, whenever `app-panel` is shown with the App Manager, so a login made after the chartplotter loaded is picked up. |
@@ -395,7 +424,7 @@ From the window manager to the side panel:
 
 | Topic | Params |
 | ----- | ------ |
-| `snapshot` | `entries`; `urls` (`{ [id]: resolvedUrl }`, side-panel entries); `status` (`{ [id]: { state?, error?, needsReload } }`, `state` for window entries only); `panelApp` (entry id or `null`); `needsReload` (bool); `canEdit` (bool, §7.3); `editLevel` (`readwrite` \| `admin`, §7.3); `editReason?` (why editing is unavailable); `webapps` (`[{ package, name }]`, §4.1); `problem?` (list-level message) |
+| `snapshot` | `entries`; `urls` (`{ [id]: resolvedUrl }`, side-panel entries); `status` (`{ [id]: { state?, titleBar?, error?, needsReload } }`, `state` and `titleBar` for window entries only); `panelApp` (entry id or `null`); `needsReload` (bool); `canEdit` (bool, §7.3); `editLevel` (`readwrite` \| `admin`, §7.3); `editReason?` (why editing is unavailable); `webapps` (`[{ package, name }]`, §4.1); `problem?` (list-level message) |
 | `reply` | `reqId`, `ok`, `error?` (`{ code, message }`); `entryId` on a successful `saveEntry` |
 
 The manager publishes a `snapshot` after every change, so the side panel never
@@ -516,7 +545,13 @@ launcher. The main toolbar button shows it
     are highlighted, since the window is on screen. Then the name, a short
     status hint for `hidden`
     ("running hidden") or `error` (e.g. "not installed", "window limit
-    reached"), and an **(i)** button opening the entry's configuration.
+    reached"), a **title-bar switch** (§4.10; a window icon, struck
+    through and highlighted while the title bar hides when idle, with
+    `aria-pressed`; it says when the open window will reload, sends
+    `setTitleBar` and is disabled until the reply), and an **(i)** button
+    opening the entry's configuration. The switch is on the row, not in the
+    configuration form, because it is per device: the form edits the boat's
+    list, needs edit rights and has Save / Cancel.
   - **Side-panel entry**: an **Open** button in the same place (the app
     takes the launcher's place in the side panel; the main button brings the
     launcher back), name, a "side panel" hint, and **(i)**. Open sends
@@ -656,7 +691,11 @@ Window entries are not in the cycle: they are not shown in the side panel.
   the launcher, not when you close the drawer.
 - **Kiosk mode** hides the toolbar, so the launcher and the buttons cannot be
   reached there; apps set to open at startup still open, which suits a kiosk
-  display.
+  display. Their title-bar choice (§4.10) applies there too, so set it up on
+  that device before turning kiosk mode on.
+- **Hiding a window's title bar** is per device, makes it fade when idle
+  rather than disappear (the host keeps a way back and the close control),
+  and reloads an open window when switched.
 - **"Remember last" is per device**; two chartplotter tabs in the same
   browser share it.
 - **Migrating from Freeboard's Instruments drawer**: add the app with *Show
@@ -744,6 +783,13 @@ Window entries are not in the cycle: they are not shown in the side panel.
     list matches `loadedButtons`; non-button changes never set it;
   - `windows.limit` → `error` on the remaining entries;
   - `409` → reload, reconcile, error reply;
+  - title bar (§4.10): `autoHide` from state reaches `openWindow` (and the
+    default is not sent) and the snapshot; `setTitleBar` reopens an open
+    window open and a hidden one hidden, only remembers it for a closed
+    one, does nothing for the same value, never saves the list; unknown,
+    side-panel and malformed requests refused; a failed reopen replies with
+    the error; deleted entries' choices dropped; an embedded chartplotter
+    applies and stores it;
   - showing a hidden window reopens it only on `windows.unknownId`;
   - `hello` is answered only after startup has loaded the list;
   - uninstalled webapp → `error`, no `openWindow` / no side-panel show.
@@ -796,6 +842,10 @@ Windows:
 10. Open more windows than the host allows → the extra entry shows the limit
     error; hidden windows are reclaimed first and their buttons read Open.
 11. Phone-width viewport → windows become sheets; the buttons still follow.
+11a. Title bar: press the row's window icon on an open window → it reloads
+    in place with a title bar that fades when idle, and the grip brings it
+    back; on a hidden window it stays hidden. Reload → still bare. A second
+    device still shows the title bar. A read-only user can switch it.
 
 Side panel and buttons (the #883 replacement):
 

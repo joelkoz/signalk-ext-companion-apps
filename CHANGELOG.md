@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Hide a window's title bar: a switch on each window app's row in the App
+  Manager makes the title bar fade when idle, for a kiosk-like view. It is
+  set per device and needs no login; an open window reloads to apply it.
+
 ## [1.0.1] - 2026-10-10
 
 ### Changed

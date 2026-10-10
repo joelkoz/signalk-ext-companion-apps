@@ -46,6 +46,12 @@ plotter extensions with floating windows, such as Freeboard-SK 3.3.0 or later.
   **Open**, then **Close** (or **Hide**, for apps set to *Hide*) while the
   window is on screen, and **Show** for a hidden one. Drag and resize windows as you like; each one remembers its place
   on each device. The window's own close button does the same as **Close** / **Hide**.
+- **Hide the title bar**: the window icon next to a window app makes its
+  title bar fade away when you are not using it, for a cleaner, kiosk-like
+  view; touch or hover the top edge to bring it back. It is set **per
+  device**, so the helm tablet can show bare windows while the laptop keeps
+  its title bars, and it needs no login. An open window reloads when you
+  switch it.
 - **Side panel**: press **Open** next to an app. It takes the App Manager's
   place in the side panel, which shows one app at a time. A bar at the top of
   the side panel steps through the App Manager and your side-panel apps with
@@ -55,7 +61,8 @@ plotter extensions with floating windows, such as Freeboard-SK 3.3.0 or later.
   panel app opens, and pressing again closes the side panel.
 
 The app list is shared by everyone using this Signal K server. Which windows
-were open ("Remember last") is kept per device. Adding or changing apps needs
+were open ("Remember last") and which hide their title bar are kept per
+device. Adding or changing apps needs
 a Signal K login with read/write access. Anyone who can see the list can
 open and close the apps: on Signal K servers older than 2.31 that is admins
 only, as the list itself is admin-only there.
@@ -98,7 +105,10 @@ to *Hide* switch instantly.
   closed on chartplotters that report it (Freeboard-SK does). On others, it
   stops when you switch to another app or back to the App Manager.
 - **Kiosk mode** hides the toolbar, so the App Manager and the buttons cannot be
-  reached there; apps set to open at startup still open.
+  reached there; apps set to open at startup still open, with their title
+  bars hidden if you chose that on this device beforehand.
+- **A hidden title bar fades rather than disappears**: the chartplotter
+  always keeps a way to bring it back and to close the window.
 - **"Remember last" is per device**; two chartplotter tabs in the same
   browser share it.
 - **A chartplotter shown inside another page** (for example a KIP dashboard

@@ -18,14 +18,14 @@ const entry = (id, extra = {}) => ({
 })
 const panelEntry = (id, extra = {}) => entry(id, { showIn: 'panel', ...extra })
 
-function fakeClient({ openApps = {}, limit = Infinity } = {}) {
+function fakeClient({ openApps = {}, titleBars, limit = Infinity } = {}) {
   let n = 0
   const c = {
     log: [],
     published: [],
     subs: [],
     windows: new Map(),
-    stateValues: { openApps },
+    stateValues: { openApps, ...(titleBars ? { titleBars } : {}) },
     async publish(topic, params, scope) {
       c.published.push({ topic, params, scope })
     },
@@ -500,4 +500,91 @@ test('hello is answered after startup has loaded the list', async () => {
   await m.idle()
   assert.ok(client.snapshots().length >= 1)
   assert.ok(client.snapshots().every((snap) => snap.entries.length === 1))
+})
+
+test('title bar: a per-device autoHide reaches openWindow and the snapshot (§4.10)', async () => {
+  const { client } = await setup({
+    apps: [entry('a', { startup: 'always' }), entry('b', { startup: 'always' }), panelEntry('p')],
+    titleBars: { a: 'autoHide', p: 'autoHide', b: 'bogus' }
+  })
+  const [oa, ob] = client.ops('open')
+  assert.strictEqual(oa.titleBar, 'autoHide')
+  assert.ok(!('titleBar' in ob), 'the host default (fixed) is not sent')
+  const st = client.lastSnapshot().status
+  assert.strictEqual(st.a.titleBar, 'autoHide')
+  assert.strictEqual(st.b.titleBar, 'fixed')
+  assert.ok(!('titleBar' in st.p), 'side-panel entries have no title bar')
+})
+
+test('title bar: setTitleBar reopens a live window in its state and remembers the choice', async () => {
+  const { m, client, api } = await setup({ apps: [entry('a', { startup: 'always' }), entry('h', { closeBehavior: 'hide' }), entry('c')] })
+  const w1 = [...client.openWins.keys()][0]
+  await send(m, client, T.setTitleBar, { entryId: 'a', titleBar: 'autoHide' })
+  assert.deepStrictEqual(client.ops('close'), [w1])
+  assert.strictEqual(client.ops('open').at(-1).titleBar, 'autoHide')
+  assert.strictEqual(client.ops('open').at(-1).visible, undefined, 'an open window stays open')
+  assert.strictEqual(stateOf(client, 'a'), 'open')
+  assert.deepStrictEqual(client.stateValues.titleBars, { a: 'autoHide' })
+  assert.strictEqual(api.saves.length, 0, 'never written to the boat-wide list')
+
+  // same value again: nothing to do
+  const opens = client.ops('open').length
+  await send(m, client, T.setTitleBar, { entryId: 'a', titleBar: 'autoHide' })
+  assert.strictEqual(client.ops('open').length, opens)
+
+  // a hidden window is reopened hidden
+  await send(m, client, T.setOpen, { entryId: 'h', open: true })
+  await send(m, client, T.setOpen, { entryId: 'h', open: false })
+  await send(m, client, T.setTitleBar, { entryId: 'h', titleBar: 'autoHide' })
+  assert.strictEqual(client.ops('open').at(-1).visible, false)
+  assert.strictEqual(stateOf(client, 'h'), 'hidden')
+
+  // a closed window only remembers it, for the next open
+  const before = client.ops('open').length
+  await send(m, client, T.setTitleBar, { entryId: 'c', titleBar: 'autoHide' })
+  assert.strictEqual(client.ops('open').length, before)
+  await send(m, client, T.setOpen, { entryId: 'c', open: true })
+  assert.strictEqual(client.ops('open').at(-1).titleBar, 'autoHide')
+
+  // back to fixed
+  await send(m, client, T.setTitleBar, { entryId: 'a', titleBar: 'fixed' })
+  assert.ok(!('titleBar' in client.ops('open').at(-1)))
+  assert.deepStrictEqual(client.stateValues.titleBars, { h: 'autoHide', c: 'autoHide' })
+  assert.ok(client.replies().every((r) => r.ok))
+})
+
+test('title bar: refused for unknown, side-panel and malformed requests', async () => {
+  const { m, client } = await setup({ apps: [entry('a'), panelEntry('p')] })
+  await send(m, client, T.setTitleBar, { entryId: 'nope', titleBar: 'autoHide' })
+  await send(m, client, T.setTitleBar, { entryId: 'p', titleBar: 'autoHide' })
+  await send(m, client, T.setTitleBar, { entryId: 'a', titleBar: 'none' })
+  const r = client.replies()
+  assert.deepStrictEqual(r.map((x) => [x.ok, x.error?.code]), [[false, 'unknown'], [false, 'invalid'], [false, 'invalid']])
+  assert.strictEqual(client.stateValues.titleBars, undefined)
+})
+
+test('title bar: a failed reopen is reported; deleting an entry drops its choice', async () => {
+  const { m, client } = await setup({ apps: [entry('a', { startup: 'always' }), entry('b')], titleBars: { gone: 'autoHide' }, limit: 1 })
+  // the replacement does not fit (another extension took the slot meanwhile)
+  client.openWins.set('other', {})
+  await send(m, client, T.setTitleBar, { entryId: 'a', titleBar: 'autoHide' })
+  assert.strictEqual(stateOf(client, 'a'), 'error')
+  assert.strictEqual(client.replies().at(-1).error.code, 'open')
+  assert.deepStrictEqual(client.stateValues.titleBars, { a: 'autoHide' }, 'stale ids pruned')
+
+  await send(m, client, T.deleteEntry, { entryId: 'a' })
+  assert.deepStrictEqual(client.stateValues.titleBars, {})
+})
+
+test('title bar: an embedded chartplotter honours and stores the choice', async () => {
+  const client = fakeClient({ titleBars: { a: 'autoHide' } })
+  const api = fakeApi({ apps: [entry('a'), entry('b')] })
+  const m = createManager({ client, api, embedded: true, setTimer: () => {} })
+  await m.start()
+  client.emit(T.setOpen, { v: 1, reqId: 'r1', entryId: 'a', open: true })
+  await m.idle()
+  assert.strictEqual(client.ops('open').at(-1).titleBar, 'autoHide')
+  client.emit(T.setTitleBar, { v: 1, reqId: 'r2', entryId: 'b', titleBar: 'autoHide' })
+  await m.idle()
+  assert.deepStrictEqual(client.stateValues.titleBars, { a: 'autoHide', b: 'autoHide' })
 })

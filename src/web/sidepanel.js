@@ -210,6 +210,7 @@ function renderNavbar() {
 // ---- launcher: list ----------------------------------------------------------
 
 let listError = null
+const titleBarBusy = new Set() // entry ids with a setTitleBar request in flight
 
 function render() {
   if (view === 'edit' && form) renderForm()
@@ -233,6 +234,38 @@ function hintFor(entry, st) {
   if (entry.showIn === 'panel') return h('span', { class: 'hint' }, 'side panel')
   if (st?.state === 'hidden') return h('span', { class: 'hint' }, 'running hidden')
   return null
+}
+
+// The title-bar switch of a window entry (§4.10): a per-device choice, so it
+// sits on the row (one tap, no edit rights needed) rather than in the form,
+// which edits the boat's list. Pressed means the title bar hides when idle.
+function titleBarToggle(e, st) {
+  const bare = st.titleBar === 'autoHide'
+  const live = st.state === 'open' || st.state === 'hidden'
+  const tip = bare
+    ? `${e.name}: the title bar hides when idle on this device. Press to keep it shown.`
+    : `${e.name}: hide the title bar when idle on this device.`
+  return h(
+    'button',
+    {
+      class: `icon-btn title-bar${bare ? ' on' : ''}`,
+      'aria-pressed': String(bare),
+      'aria-label': `Hide the ${e.name} title bar when idle`,
+      title: live ? `${tip} The open window reloads.` : tip,
+      disabled: titleBarBusy.has(e.id),
+      onclick: () => {
+        listError = null
+        titleBarBusy.add(e.id)
+        render()
+        send(T.setTitleBar, { entryId: e.id, titleBar: bare ? 'fixed' : 'autoHide' }, (r) => {
+          titleBarBusy.delete(e.id)
+          if (!r.ok) listError = `${e.name}: ${r.error?.message ?? 'failed'}`
+          if (view === 'list') render()
+        })
+      }
+    },
+    icon(bare ? 'web_asset_off' : 'web_asset')
+  )
 }
 
 function renderList() {
@@ -290,6 +323,7 @@ function renderList() {
         h('span', { class: 'control' }, control),
         entryIcon(e),
         h('span', { class: 'name' }, h('span', { class: 'label' }, e.name), hintFor(e, st)),
+        isWindow ? titleBarToggle(e, st) : null,
         h(
           'button',
           { class: 'icon-btn info', title: `Configure ${e.name}`, 'aria-label': `Configure ${e.name}`, onclick: () => openForm(e) },

@@ -36,4 +36,4 @@ export const BUTTON_ICONS = [
 // saved with one keeps drawing it. `web` became the main button's icon.
 export const RETIRED_ICONS = [['web', 'Web page']]
 
-export const UI_ICONS = ['info', 'add', 'arrow_back', 'arrow_drop_down', 'block', 'chevron_left', 'chevron_right', 'settings']
+export const UI_ICONS = ['info', 'add', 'arrow_back', 'arrow_drop_down', 'block', 'chevron_left', 'chevron_right', 'settings', 'web_asset', 'web_asset_off']

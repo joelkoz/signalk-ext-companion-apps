@@ -12,6 +12,7 @@ const { cleanEntry, resolveUrl, MAX_ENTRIES } = validate
 const { generatedButtons } = manifestLib
 
 const WINDOW_EVENTS = ['window.closed', 'window.state', 'window.bounds']
+const TITLE_BARS = ['fixed', 'autoHide']
 const RETRY_START_MS = 5000
 const RETRY_MAX_MS = 5 * 60 * 1000
 
@@ -63,6 +64,8 @@ export function createManager({ client, api, hostName = null, embedded = false, 
     // entryId -> error message, for side-panel entries that could not be shown
     panelErrors: new Map(),
     openApps: {},
+    // entryId -> 'autoHide', per device (§4.10); absent means 'fixed'
+    titleBars: {},
     started: false
   }
   let queue = Promise.resolve()
@@ -83,6 +86,8 @@ export function createManager({ client, api, hostName = null, embedded = false, 
   // The chartplotter's own webapp (package `freeboard-sk` or `@scope/freeboard-sk`
   // for host `freeboard-sk`) is not offered: it would open inside itself.
   const isHost = (pkg) => !!hostName && (pkg === hostName || pkg.endsWith(`/${hostName}`))
+
+  const titleBarOf = (entry) => (s.titleBars[entry.id] === 'autoHide' ? 'autoHide' : 'fixed')
 
   const isInstalled = (entry) =>
     entry.source.type !== 'webapp' || s.webapps === null || s.webapps.some((w) => w.package === entry.source.package)
@@ -122,6 +127,7 @@ export function createManager({ client, api, hostName = null, embedded = false, 
       if (e.showIn === 'window') {
         const w = winOf(e.id)
         st.state = w.status
+        st.titleBar = titleBarOf(e)
         if (w.error) st.error = w.error
       } else {
         const url = resolveUrl(e.source)
@@ -168,6 +174,20 @@ export function createManager({ client, api, hostName = null, embedded = false, 
     }
   }
 
+  // The title-bar choice is the user's explicit act on this device, so unlike
+  // openApps an embedded chartplotter writes it too. Entries deleted here or
+  // elsewhere are dropped on the way.
+  async function persistTitleBars() {
+    const next = {}
+    for (const [id, mode] of Object.entries(s.titleBars)) if (mode === 'autoHide' && byId(id)) next[id] = mode
+    s.titleBars = next
+    try {
+      await client.state.set({ titleBars: next }, 'extension')
+    } catch {
+      // best effort: the choice still applies until the chartplotter reloads
+    }
+  }
+
   const changed = () => {
     persistOpenApps()
     publishSnapshot()
@@ -198,6 +218,7 @@ export function createManager({ client, api, hostName = null, embedded = false, 
         userClose: entry.closeBehavior === 'hide' ? 'hide' : 'close',
         restoreKey: entry.id,
         geometry: geometryFor(entry),
+        ...(titleBarOf(entry) === 'autoHide' ? { titleBar: 'autoHide' } : {}),
         ...(visible ? {} : { visible: false })
       })
       setWin(entry.id, { windowId: state.windowId, status: state.visible === false ? 'hidden' : 'open' })
@@ -258,6 +279,27 @@ export function createManager({ client, api, hostName = null, embedded = false, 
       await closeWindowOf(entry.id)
       setWin(entry.id, { status: 'closed' })
     }
+  }
+
+  /**
+   * Switch an entry's title bar on this device (§4.10). The host cannot change
+   * `titleBar` on an open window, so a live window is reopened in its current
+   * visible/hidden state; `restoreKey` puts it back where it was. Returns
+   * whether it reopened one.
+   */
+  async function setTitleBar(entry, mode) {
+    if (titleBarOf(entry) === mode) return false
+    if (mode === 'autoHide') s.titleBars[entry.id] = mode
+    else delete s.titleBars[entry.id]
+    await persistTitleBars()
+    const w = winOf(entry.id)
+    if (w.windowId && (w.status === 'open' || w.status === 'hidden')) {
+      const visible = w.status === 'open'
+      await closeWindowOf(entry.id)
+      await openWindow(entry, { visible })
+      return true
+    }
+    return false
   }
 
   // ---- side panel (§4.9) -------------------------------------------------
@@ -386,6 +428,7 @@ export function createManager({ client, api, hostName = null, embedded = false, 
     if (!res.ok) return res
     s.entries = apps
     await reconcile(old, apps)
+    if (s.titleBars[entryId]) await persistTitleBars()
     return { ok: true }
   }
 
@@ -518,6 +561,20 @@ export function createManager({ client, api, hostName = null, embedded = false, 
           else await reply(params.reqId, true)
         })
         break
+      case T.setTitleBar:
+        serial(async () => {
+          const entry = byId(params.entryId)
+          if (!entry) return replyError(params.reqId, 'unknown', 'This app no longer exists.')
+          if (entry.showIn !== 'window' || !TITLE_BARS.includes(params.titleBar)) {
+            return replyError(params.reqId, 'invalid', 'Only a window app has a title bar to hide.')
+          }
+          const reopened = await setTitleBar(entry, params.titleBar)
+          changed()
+          const err = reopened && winOf(entry.id).error
+          if (err) await replyError(params.reqId, 'open', err)
+          else await reply(params.reqId, true)
+        })
+        break
       case T.saveEntry:
         serial(async () => {
           const res = await saveEntry(params.entry)
@@ -549,11 +606,13 @@ export function createManager({ client, api, hostName = null, embedded = false, 
     await client.subscribe(WINDOW_EVENTS, onWindowEvent)
     return serial(async () => {
       try {
-        const values = await client.state.get(['openApps'], 'extension')
-        const v = values.openApps
-        s.openApps = v && typeof v === 'object' && !Array.isArray(v) ? v : {}
+        const values = await client.state.get(['openApps', 'titleBars'], 'extension')
+        const plain = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {})
+        s.openApps = plain(values.openApps)
+        s.titleBars = plain(values.titleBars)
       } catch {
         s.openApps = {}
+        s.titleBars = {}
       }
       const [ok] = await Promise.all([
         loadList(),
