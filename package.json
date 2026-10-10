@@ -1,6 +1,6 @@
 {
   "name": "signalk-ext-companion-apps",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Show webapps in floating windows over the chart or in the side panel of a plotterExtensions-capable chartplotter",
   "main": "plugin/index.js",
   "keywords": [
