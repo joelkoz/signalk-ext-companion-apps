@@ -378,6 +378,9 @@ gets to a kiosk view.
   close it and reopen it in the same visible/hidden state: `ui.updateWindow`
   cannot change `titleBar`, so the page reloads; `restoreKey` keeps its
   place. A closed window just opens with it next time. Same value → nothing.
+  If closing the old window fails (other than `windows.unknownId`), no
+  second window is opened: the choice stays stored and the reply says it
+  applies the next time the window opens.
   Unknown entry, side-panel entry or a value other than `fixed` / `autoHide`
   → error reply, nothing stored. A reopen that fails (e.g. `windows.limit`)
   leaves the entry in `error` and replies with that error.
@@ -386,8 +389,9 @@ gets to a kiosk view.
   right before each write and changes only the one entry, never writing back
   a stale copy. It keeps ids it does not know: its list may be older than
   the tab that stored them. If the
-  write fails, nothing changes (no reopen) and `setTitleBar` replies with an
-  error ("could not be saved on this device").
+  write fails, or the read before it, nothing changes (no reopen, and the
+  startup copy is never written back) and `setTitleBar` replies with an error
+  ("could not be saved on this device").
 - **Delete** drops the entry's choice (re-read first, since another tab may
   have set it).
 - **The host may ignore it.** A host may present a window as a `sheet` or
@@ -809,7 +813,8 @@ Window entries are not in the cycle: they are not shown in the side panel.
     window open and a hidden one hidden, only remembers it for a closed
     one, does nothing for the same value, never saves the list; keeps a
     choice another context stored meanwhile; a failed state write changes
-    nothing and replies with an error; ids this manager does not know are
+    nothing and replies with an error, as does a failed read before it; a
+    failed close opens no second window; ids this manager does not know are
     kept, and a delete drops the entry's choice even when another context
     set it; unknown,
     side-panel and malformed requests refused; a failed reopen replies with
