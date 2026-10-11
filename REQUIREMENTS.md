@@ -378,16 +378,28 @@ gets to a kiosk view.
   close it and reopen it in the same visible/hidden state: `ui.updateWindow`
   cannot change `titleBar`, so the page reloads; `restoreKey` keeps its
   place. A closed window just opens with it next time. Same value → nothing.
+  If closing the old window fails (other than `windows.unknownId`), no
+  second window is opened: the choice stays stored and the reply says it
+  applies the next time the window opens.
   Unknown entry, side-panel entry or a value other than `fixed` / `autoHide`
   → error reply, nothing stored. A reopen that fails (e.g. `windows.limit`)
   leaves the entry in `error` and replies with that error.
 - **Storing**: every context of the extension on this device (another tab,
   an embedded chartplotter) shares `titleBars`, so the manager re-reads it
-  right before each write and changes only the one entry (dropping ids of
-  entries that no longer exist), never writing back a stale copy. If the
-  write fails, nothing changes (no reopen) and `setTitleBar` replies with an
-  error ("could not be saved on this device").
-- **Delete** drops the entry's choice.
+  right before each write and changes only the one entry, never writing back
+  a stale copy. It keeps ids it does not know: its list may be older than
+  the tab that stored them. If the
+  write fails, or the read before it, nothing changes (no reopen, and the
+  startup copy is never written back) and `setTitleBar` replies with an error
+  ("could not be saved on this device").
+- **Delete** drops the entry's choice (re-read first, since another tab may
+  have set it).
+- **The host may ignore it.** A host may present a window as a `sheet` or
+  `fullscreen` instead of `floating` when it would not fit (the API spec,
+  *Windows*). Freeboard-SK does below a 600 px wide window area (phones) and
+  auto-hides the title bar only while a window is floating, so a sheet keeps
+  its title bar. The extension still sends `titleBar: 'autoHide'`: the host
+  applies it again when the window floats. Nothing to do here; document it.
 
 ## 5. Bus protocol
 
@@ -706,7 +718,9 @@ Window entries are not in the cycle: they are not shown in the side panel.
   that device before turning kiosk mode on.
 - **Hiding a window's title bar** is per device, makes it fade when idle
   rather than disappear (the host keeps a way back and the close control),
-  and reloads an open window when switched.
+  and reloads an open window when switched. On a phone-width screen
+  Freeboard-SK shows windows as bottom sheets, which always keep their title
+  bar (§4.10).
 - **"Remember last" is per device**; two chartplotter tabs in the same
   browser share it.
 - **Migrating from Freeboard's Instruments drawer**: add the app with *Show
@@ -799,7 +813,10 @@ Window entries are not in the cycle: they are not shown in the side panel.
     window open and a hidden one hidden, only remembers it for a closed
     one, does nothing for the same value, never saves the list; keeps a
     choice another context stored meanwhile; a failed state write changes
-    nothing and replies with an error; unknown,
+    nothing and replies with an error, as does a failed read before it; a
+    failed close opens no second window; ids this manager does not know are
+    kept, and a delete drops the entry's choice even when another context
+    set it; unknown,
     side-panel and malformed requests refused; a failed reopen replies with
     the error; deleted entries' choices dropped; an embedded chartplotter
     applies and stores it;
@@ -856,11 +873,12 @@ Windows:
     error; hidden windows are reclaimed first and their buttons read Open.
 11. Phone-width viewport → windows become sheets; the buttons still follow.
 11a. Title bar: the configuration form's *Title bar* → *Hide when idle*,
-    Save → the open window reloads bare; a new entry saved with it opens
-    bare. Press the row's window icon on an open window → it reloads
-    in place with a title bar that fades when idle, and the grip brings it
-    back; on a hidden window it stays hidden. Reload → still bare. A second
-    device still shows the title bar. A read-only user can switch it.
+    Save → the open window reloads in place with a title bar that fades when
+    idle, and the grip brings it back; a new entry saved with it opens the
+    same way. Reload → still fading. A second device still shows the title
+    bar. The row's window icon toggles it: press it on that open window → it
+    reloads with a fixed title bar; press again → fading again; on a hidden
+    window it stays hidden. A read-only user can use the icon.
 
 Side panel and buttons (the #883 replacement):
 

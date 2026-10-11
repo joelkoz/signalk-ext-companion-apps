@@ -112,6 +112,11 @@ to *Hide* switch instantly.
   bars hidden if you chose that on this device beforehand.
 - **A hidden title bar fades rather than disappears**: the chartplotter
   always keeps a way to bring it back and to close the window.
+- **On a narrow screen the title bar always shows.** Below 600 pixels wide
+  in Freeboard-SK (most phones held upright), windows become panels docked at
+  the bottom of the screen, and the chartplotter keeps their title bar
+  visible whatever you chose. The choice applies again on a wider screen, such as a tablet or the
+  phone turned sideways if that is wide enough.
 - **"Remember last" is per device**; two chartplotter tabs in the same
   browser share it.
 - **A chartplotter shown inside another page** (for example a KIP dashboard

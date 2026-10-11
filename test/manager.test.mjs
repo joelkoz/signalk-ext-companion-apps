@@ -64,12 +64,20 @@ function fakeClient({ openApps = {}, titleBars, limit = Infinity } = {}) {
       },
       async close(id) {
         c.log.push(['close', id])
+        if (c.failClose) {
+          const e = new Error('close failed')
+          if (c.failClose === 'gone') e.data = { reason: 'windows.unknownId' }
+          else throw e
+          c.openWins.delete(id)
+          throw e
+        }
         c.openWins.delete(id)
       }
     },
     openWins: new Map(),
     state: {
       async get() {
+        if (c.failGet) throw new Error('state read failed')
         return { ...c.stateValues }
       },
       async set(v) {
@@ -566,16 +574,25 @@ test('title bar: refused for unknown, side-panel and malformed requests', async 
 })
 
 test('title bar: a failed reopen is reported; deleting an entry drops its choice', async () => {
-  const { m, client } = await setup({ apps: [entry('a', { startup: 'always' }), entry('b')], titleBars: { gone: 'autoHide' }, limit: 1 })
+  const { m, client } = await setup({ apps: [entry('a', { startup: 'always' }), entry('b')], titleBars: { other: 'autoHide' }, limit: 1 })
   // the replacement does not fit (another extension took the slot meanwhile)
   client.openWins.set('other', {})
   await send(m, client, T.setTitleBar, { entryId: 'a', titleBar: 'autoHide' })
   assert.strictEqual(stateOf(client, 'a'), 'error')
   assert.strictEqual(client.replies().at(-1).error.code, 'open')
-  assert.deepStrictEqual(client.stateValues.titleBars, { a: 'autoHide' }, 'stale ids pruned')
+  assert.deepStrictEqual(
+    client.stateValues.titleBars,
+    { other: 'autoHide', a: 'autoHide' },
+    'an id this manager does not know is kept: another tab may have a newer list'
+  )
 
   await send(m, client, T.deleteEntry, { entryId: 'a' })
-  assert.deepStrictEqual(client.stateValues.titleBars, {})
+  assert.deepStrictEqual(client.stateValues.titleBars, { other: 'autoHide' })
+
+  // a choice another tab set for an entry deleted here goes with the delete
+  client.stateValues.titleBars = { other: 'autoHide', b: 'autoHide' }
+  await send(m, client, T.deleteEntry, { entryId: 'b' })
+  assert.deepStrictEqual(client.stateValues.titleBars, { other: 'autoHide' })
 })
 
 test('title bar: an embedded chartplotter honours and stores the choice', async () => {
@@ -613,4 +630,31 @@ test('title bar: a choice that cannot be stored changes nothing and replies with
   assert.strictEqual(client.ops('open').length, 1, 'the window is not reopened')
   assert.strictEqual(client.ops('close').length, 0)
   assert.strictEqual(client.lastSnapshot().status.a.titleBar, 'fixed')
+})
+
+test('title bar: a failed state read stores nothing rather than writing a stale copy', async () => {
+  const { m, client } = await setup({ apps: [entry('a', { startup: 'always' }), entry('b')] })
+  client.stateValues.titleBars = { b: 'autoHide' } // another tab, after this one started
+  client.failGet = true
+  await send(m, client, T.setTitleBar, { entryId: 'a', titleBar: 'autoHide' })
+  assert.deepStrictEqual(client.replies().at(-1).error, { code: 'state', message: MESSAGES.titleBarNotSaved })
+  assert.deepStrictEqual(client.stateValues.titleBars, { b: 'autoHide' }, 'the other tab\'s choice survives')
+  assert.strictEqual(client.ops('open').length, 1, 'no reopen')
+})
+
+test('title bar: no second window when the old one does not close', async () => {
+  const { m, client } = await setup({ apps: [entry('a', { startup: 'always' }), entry('b', { startup: 'always' })] })
+  client.failClose = 'error'
+  await send(m, client, T.setTitleBar, { entryId: 'a', titleBar: 'autoHide' })
+  assert.strictEqual(client.ops('open').length, 2, 'not reopened')
+  assert.deepStrictEqual(client.replies().at(-1).error, { code: 'open', message: MESSAGES.titleBarNotApplied })
+  assert.deepStrictEqual(client.stateValues.titleBars, { a: 'autoHide' }, 'the choice is kept for the next open')
+  assert.strictEqual(stateOf(client, 'a'), 'open', 'still tracks the old window')
+
+  // the host no longer has it: reopen as usual
+  client.failClose = 'gone'
+  await send(m, client, T.setTitleBar, { entryId: 'b', titleBar: 'autoHide' })
+  assert.strictEqual(client.ops('open').at(-1).titleBar, 'autoHide')
+  assert.strictEqual(stateOf(client, 'b'), 'open')
+  assert.strictEqual(client.replies().at(-1).ok, true)
 })
