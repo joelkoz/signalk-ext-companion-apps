@@ -12,6 +12,7 @@ const { cleanEntry, resolveUrl, MAX_ENTRIES } = validate
 const { generatedButtons } = manifestLib
 
 const WINDOW_EVENTS = ['window.closed', 'window.state', 'window.bounds']
+const TITLE_BARS = ['fixed', 'autoHide']
 const RETRY_START_MS = 5000
 const RETRY_MAX_MS = 5 * 60 * 1000
 
@@ -22,7 +23,9 @@ export const MESSAGES = {
   listLoad: 'The app list could not be loaded from the server. Retrying…',
   conflict: 'The app list was changed elsewhere and has been reloaded. Please repeat your change.',
   forbidden: 'You do not have permission to change the app list.',
-  full: `At most ${MAX_ENTRIES} apps are allowed.`
+  full: `At most ${MAX_ENTRIES} apps are allowed.`,
+  titleBarNotSaved: 'The title bar setting could not be saved on this device.',
+  titleBarNotApplied: 'The title bar setting is saved; it applies the next time the window opens.'
 }
 
 /** An error the API layer throws for a non-2xx response. */
@@ -37,6 +40,8 @@ export class HttpError extends Error {
 const reasonOf = (err) => err?.data?.reason ?? err?.reason
 
 const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+
+const plainObject = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {})
 
 /**
  * @param {object} deps
@@ -63,6 +68,8 @@ export function createManager({ client, api, hostName = null, embedded = false, 
     // entryId -> error message, for side-panel entries that could not be shown
     panelErrors: new Map(),
     openApps: {},
+    // entryId -> 'autoHide', per device (§4.10); absent means 'fixed'
+    titleBars: {},
     started: false
   }
   let queue = Promise.resolve()
@@ -83,6 +90,8 @@ export function createManager({ client, api, hostName = null, embedded = false, 
   // The chartplotter's own webapp (package `freeboard-sk` or `@scope/freeboard-sk`
   // for host `freeboard-sk`) is not offered: it would open inside itself.
   const isHost = (pkg) => !!hostName && (pkg === hostName || pkg.endsWith(`/${hostName}`))
+
+  const titleBarOf = (entry) => (s.titleBars[entry.id] === 'autoHide' ? 'autoHide' : 'fixed')
 
   const isInstalled = (entry) =>
     entry.source.type !== 'webapp' || s.webapps === null || s.webapps.some((w) => w.package === entry.source.package)
@@ -122,6 +131,7 @@ export function createManager({ client, api, hostName = null, embedded = false, 
       if (e.showIn === 'window') {
         const w = winOf(e.id)
         st.state = w.status
+        st.titleBar = titleBarOf(e)
         if (w.error) st.error = w.error
       } else {
         const url = resolveUrl(e.source)
@@ -168,6 +178,34 @@ export function createManager({ client, api, hostName = null, embedded = false, 
     }
   }
 
+  // Store one entry's title-bar choice (`null` drops it). The title-bar choice
+  // is the user's explicit act on this device, so unlike openApps an embedded
+  // chartplotter writes it too. Other contexts on this device (another tab, an
+  // embedded chartplotter) share the map, so it is re-read right before the
+  // write and only this entry changes. Other ids are kept even when this
+  // manager does not know them: its list may be older than the tab that
+  // stored them. A deleted entry's choice goes with the delete. Returns
+  // whether the write succeeded; on failure (of the read too: writing the
+  // startup copy could erase another tab's choice) nothing changes.
+  async function storeTitleBar(entryId, mode) {
+    let base
+    try {
+      base = plainObject((await client.state.get(['titleBars'], 'extension')).titleBars)
+    } catch {
+      return false
+    }
+    const next = {}
+    for (const [id, m] of Object.entries(base)) if (m === 'autoHide' && id !== entryId) next[id] = m
+    if (mode === 'autoHide') next[entryId] = mode
+    try {
+      await client.state.set({ titleBars: next }, 'extension')
+    } catch {
+      return false
+    }
+    s.titleBars = next
+    return true
+  }
+
   const changed = () => {
     persistOpenApps()
     publishSnapshot()
@@ -198,6 +236,7 @@ export function createManager({ client, api, hostName = null, embedded = false, 
         userClose: entry.closeBehavior === 'hide' ? 'hide' : 'close',
         restoreKey: entry.id,
         geometry: geometryFor(entry),
+        ...(titleBarOf(entry) === 'autoHide' ? { titleBar: 'autoHide' } : {}),
         ...(visible ? {} : { visible: false })
       })
       setWin(entry.id, { windowId: state.windowId, status: state.visible === false ? 'hidden' : 'open' })
@@ -258,6 +297,34 @@ export function createManager({ client, api, hostName = null, embedded = false, 
       await closeWindowOf(entry.id)
       setWin(entry.id, { status: 'closed' })
     }
+  }
+
+  /**
+   * Switch an entry's title bar on this device (§4.10). The host cannot change
+   * `titleBar` on an open window, so a live window is reopened in its current
+   * visible/hidden state; `restoreKey` puts it back where it was. A choice
+   * that cannot be stored changes nothing. If the old window does not close,
+   * no second one is opened: the choice applies the next time it opens.
+   * Returns `{ saved, reopened, error? }`.
+   */
+  async function setTitleBar(entry, mode) {
+    if (titleBarOf(entry) === mode) return { saved: true, reopened: false }
+    if (!(await storeTitleBar(entry.id, mode))) return { saved: false, reopened: false }
+    const w = winOf(entry.id)
+    if (w.windowId && (w.status === 'open' || w.status === 'hidden')) {
+      const visible = w.status === 'open'
+      try {
+        await client.windows.close(w.windowId)
+      } catch (err) {
+        if (reasonOf(err) !== 'windows.unknownId') {
+          return { saved: true, reopened: false, error: MESSAGES.titleBarNotApplied }
+        }
+      }
+      s.win.delete(entry.id)
+      await openWindow(entry, { visible })
+      return { saved: true, reopened: true }
+    }
+    return { saved: true, reopened: false }
   }
 
   // ---- side panel (§4.9) -------------------------------------------------
@@ -386,6 +453,7 @@ export function createManager({ client, api, hostName = null, embedded = false, 
     if (!res.ok) return res
     s.entries = apps
     await reconcile(old, apps)
+    await storeTitleBar(entryId, null) // best effort; another tab may have set it
     return { ok: true }
   }
 
@@ -518,6 +586,21 @@ export function createManager({ client, api, hostName = null, embedded = false, 
           else await reply(params.reqId, true)
         })
         break
+      case T.setTitleBar:
+        serial(async () => {
+          const entry = byId(params.entryId)
+          if (!entry) return replyError(params.reqId, 'unknown', 'This app no longer exists.')
+          if (entry.showIn !== 'window' || !TITLE_BARS.includes(params.titleBar)) {
+            return replyError(params.reqId, 'invalid', 'Only a window app has a title bar to hide.')
+          }
+          const { saved, reopened, error } = await setTitleBar(entry, params.titleBar)
+          changed()
+          const err = error || (reopened && winOf(entry.id).error)
+          if (!saved) await replyError(params.reqId, 'state', MESSAGES.titleBarNotSaved)
+          else if (err) await replyError(params.reqId, 'open', err)
+          else await reply(params.reqId, true)
+        })
+        break
       case T.saveEntry:
         serial(async () => {
           const res = await saveEntry(params.entry)
@@ -549,11 +632,12 @@ export function createManager({ client, api, hostName = null, embedded = false, 
     await client.subscribe(WINDOW_EVENTS, onWindowEvent)
     return serial(async () => {
       try {
-        const values = await client.state.get(['openApps'], 'extension')
-        const v = values.openApps
-        s.openApps = v && typeof v === 'object' && !Array.isArray(v) ? v : {}
+        const values = await client.state.get(['openApps', 'titleBars'], 'extension')
+        s.openApps = plainObject(values.openApps)
+        s.titleBars = plainObject(values.titleBars)
       } catch {
         s.openApps = {}
+        s.titleBars = {}
       }
       const [ok] = await Promise.all([
         loadList(),

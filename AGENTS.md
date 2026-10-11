@@ -120,9 +120,10 @@ server; the manual test plan is in `REQUIREMENTS.md`.
 - **Do not reach into the host's DOM** (`window.parent.document`,
   `window.parent.frames`) to find another context. It works on one host
   version and breaks on the next.
-- **The app list is per boat, "Remember last" is per device.** The list lives
-  in the server JSON file; which windows were open lives in extension-scope
-  `state.*` (host-persisted, per device). Never put device-local facts in the
+- **The app list is per boat, "Remember last" and the title bar are per
+  device.** The list lives in the server JSON file; which windows were open
+  and which hide their title bar live in extension-scope `state.*`
+  (host-persisted, per device; REQUIREMENTS.md §4.10). Never put device-local facts in the
   server file or the list in `state.*`.
 - **The launcher's window button shows what is on screen.** Its label (Open /
   Close / Hide / Show) follows the window's title bar and the host:

@@ -210,6 +210,7 @@ function renderNavbar() {
 // ---- launcher: list ----------------------------------------------------------
 
 let listError = null
+const titleBarBusy = new Set() // entry ids with a setTitleBar request in flight
 
 function render() {
   if (view === 'edit' && form) renderForm()
@@ -233,6 +234,38 @@ function hintFor(entry, st) {
   if (entry.showIn === 'panel') return h('span', { class: 'hint' }, 'side panel')
   if (st?.state === 'hidden') return h('span', { class: 'hint' }, 'running hidden')
   return null
+}
+
+// The title-bar switch of a window entry (§4.10): a per-device choice, so it
+// sits on the row (one tap, no edit rights needed) rather than in the form,
+// which edits the boat's list. Pressed means the title bar hides when idle.
+function titleBarToggle(e, st) {
+  const bare = st.titleBar === 'autoHide'
+  const live = st.state === 'open' || st.state === 'hidden'
+  const tip = bare
+    ? `${e.name}: the title bar hides when idle on this device. Press to keep it shown.`
+    : `${e.name}: hide the title bar when idle on this device.`
+  return h(
+    'button',
+    {
+      class: `icon-btn title-bar${bare ? ' on' : ''}`,
+      'aria-pressed': String(bare),
+      'aria-label': `Hide the ${e.name} title bar when idle`,
+      title: live ? `${tip} The open window reloads.` : tip,
+      disabled: titleBarBusy.has(e.id),
+      onclick: () => {
+        listError = null
+        titleBarBusy.add(e.id)
+        render()
+        send(T.setTitleBar, { entryId: e.id, titleBar: bare ? 'fixed' : 'autoHide' }, (r) => {
+          titleBarBusy.delete(e.id)
+          if (!r.ok) listError = `${e.name}: ${r.error?.message ?? 'failed'}`
+          if (view === 'list') render()
+        })
+      }
+    },
+    icon(bare ? 'web_asset_off' : 'web_asset')
+  )
 }
 
 function renderList() {
@@ -290,6 +323,7 @@ function renderList() {
         h('span', { class: 'control' }, control),
         entryIcon(e),
         h('span', { class: 'name' }, h('span', { class: 'label' }, e.name), hintFor(e, st)),
+        isWindow ? titleBarToggle(e, st) : null,
         h(
           'button',
           { class: 'icon-btn info', title: `Configure ${e.name}`, 'aria-label': `Configure ${e.name}`, onclick: () => openForm(e) },
@@ -346,6 +380,7 @@ function openForm(entry) {
       showIn: entry.showIn,
       closeBehavior: entry.closeBehavior,
       startup: entry.startup,
+      titleBar: snap?.status[entry.id]?.titleBar ?? 'fixed',
       icon: entry.icon ?? '',
       error: null,
       busy: false,
@@ -364,6 +399,7 @@ function openForm(entry) {
       showIn: 'window',
       closeBehavior: 'unload',
       startup: 'remember',
+      titleBar: 'fixed',
       icon: '',
       error: null,
       busy: false,
@@ -412,11 +448,26 @@ function save() {
   send(T.saveEntry, { entry }, (r) => {
     if (form !== f) return
     f.busy = false
-    if (r.ok) closeForm()
-    else {
+    if (r.ok) {
+      applyTitleBar(r.entryId ?? f.id, f)
+      closeForm()
+    } else {
       f.error = r.error?.message ?? 'Saving failed.'
       renderForm()
     }
+  })
+}
+
+// The form's Title bar field is not part of the entry (it is per device,
+// §4.10): once the entry is saved, it goes to the window manager like the
+// row's switch.
+function applyTitleBar(entryId, f) {
+  if (!entryId || f.showIn !== 'window') return
+  if ((snap?.status[entryId]?.titleBar ?? 'fixed') === f.titleBar) return
+  send(T.setTitleBar, { entryId, titleBar: f.titleBar }, (r) => {
+    if (r.ok) return
+    listError = `${f.name}: ${r.error?.message ?? 'failed'}`
+    if (view === 'list') render()
   })
 }
 
@@ -682,7 +733,34 @@ function renderForm() {
     )
   }
 
-  // 6. Toolbar button
+  // 6. Title bar (windows only; per device, §4.10)
+  if (f.showIn === 'window') {
+    const pickTitleBar = (v) => {
+      f.titleBar = v
+      renderForm()
+    }
+    launcher.append(
+      field(
+        'Title bar',
+        h(
+          'div',
+          { class: 'choice' },
+          radio('titleBar', 'fixed', f.titleBar, 'Always shown', pickTitleBar),
+          radio('titleBar', 'autoHide', f.titleBar, 'Hide when idle', pickTitleBar),
+          h(
+            'p',
+            { class: 'hint' },
+            f.titleBar === 'autoHide'
+              ? 'The title bar fades away when not in use; touch or hover the top edge of the window to bring it back. On a phone-width screen the chartplotter always shows it. '
+              : '',
+            'Set for this device only; also the window icon in the app list.'
+          )
+        )
+      )
+    )
+  }
+
+  // 7. Toolbar button
   launcher.append(
     field(
       'Toolbar button',
@@ -693,7 +771,7 @@ function renderForm() {
 
   if (f.error) launcher.append(banner(f.error, 'error'))
 
-  // 7. Save / Cancel / Delete
+  // 8. Save / Cancel / Delete
   const actions = h('div', { class: 'actions' })
   if (f.confirmDelete) {
     actions.append(

@@ -298,6 +298,13 @@ body.night button.open-btn.on-screen {
   border-radius: 50%;
   color: var(--muted);
 }
+/* The window's title bar hides when idle on this device. */
+.icon-btn.title-bar.on {
+  color: var(--accent);
+}
+body.night .icon-btn.title-bar.on {
+  color: var(--fg);
+}
 
 .add-row {
   border-bottom: 0;

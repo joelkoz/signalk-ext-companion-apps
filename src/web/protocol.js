@@ -10,6 +10,7 @@ export const T = {
   hello: `${PREFIX}hello`,
   setOpen: `${PREFIX}setOpen`,
   toggle: `${PREFIX}toggle`,
+  setTitleBar: `${PREFIX}setTitleBar`,
   saveEntry: `${PREFIX}saveEntry`,
   deleteEntry: `${PREFIX}deleteEntry`,
   reload: `${PREFIX}reload`,
@@ -18,7 +19,7 @@ export const T = {
 }
 
 /** Topics the window manager handles. */
-export const MANAGER_TOPICS = [T.hello, T.setOpen, T.toggle, T.saveEntry, T.deleteEntry, T.reload]
+export const MANAGER_TOPICS = [T.hello, T.setOpen, T.toggle, T.setTitleBar, T.saveEntry, T.deleteEntry, T.reload]
 /** Topics the side panel handles. */
 export const PANEL_TOPICS = [T.snapshot, T.reply]
 
